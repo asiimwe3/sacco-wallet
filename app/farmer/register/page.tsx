@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
@@ -65,6 +66,50 @@ function DoneStep({ lang, router, form }: { lang: string; router: ReturnType<typ
             : lang === 'luganda'
             ? 'Omukozi wa SACCO ajja ku nnimiro yo mu nnaku 5-7.'
             : 'A SACCO field officer will visit your farm within 5–7 days to verify and activate your wallet.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+
+function DoneRedirect({ lang, router }: { lang: string; router: ReturnType<typeof import('next/navigation').useRouter> }) {
+  const [count, setCount] = React.useState(3)
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      setCount(c => {
+        if (c <= 1) { clearInterval(t); router.push('/farmer/dashboard'); return 0 }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [router])
+
+  return (
+    <div style={{ textAlign: 'center', paddingTop: 40 }}>
+      <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
+      <h2 style={{ margin: '0 0 8px', fontSize: 26, fontWeight: 900 }}>
+        {lang === 'runyoro' ? 'Wajimu!' : lang === 'luganda' ? 'Wandiise!' : 'Registration Complete!'}
+      </h2>
+      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 20 }}>
+        {lang === 'runyoro' ? 'Obusingye bwawe bubikiriwe.' : lang === 'luganda' ? 'Ebyofaako byo bisinziiriddwa.' : 'Your details have been saved successfully.'}
+      </p>
+      <div style={{ background: 'linear-gradient(135deg, #1a6b3a, #2d9e56)', borderRadius: 20, padding: 24, color: 'white', marginBottom: 20 }}>
+        <div style={{ fontSize: 48, fontWeight: 900, marginBottom: 4 }}>{count}</div>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, opacity: 0.9 }}>Opening your dashboard...</p>
+        <div style={{ background: 'rgba(255,255,255,0.25)', borderRadius: 99, height: 8, marginTop: 12 }}>
+          <div style={{ background: '#d4a017', height: '100%', borderRadius: 99, width: `${((3 - count) / 3) * 100}%`, transition: 'width 0.9s ease' }} />
+        </div>
+      </div>
+      <button onClick={() => router.push('/farmer/dashboard')}
+        style={{ display: 'block', width: '100%', background: '#1a6b3a', color: 'white', border: 'none', borderRadius: 16, padding: '16px', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>
+        🏠 {lang === 'runyoro' ? 'Jinja ku Dashboard' : lang === 'luganda' ? 'Genda ku Dashboard' : 'Go to My Dashboard'}
+      </button>
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: 14 }}>
+        <p style={{ fontWeight: 700, color: '#1d4ed8', margin: '0 0 4px' }}>Next steps:</p>
+        <p style={{ color: '#1d4ed8', fontSize: 13, margin: 0 }}>
+          {lang === 'runyoro' ? 'Omurusha wa SACCO azaza kuhinzira lyawe mu mazoba 5-7.' : lang === 'luganda' ? 'Omukozi wa SACCO ajja ku nnimiro yo mu nnaku 5-7.' : 'A SACCO field officer will visit your farm within 5–7 days to verify and activate your wallet.'}
         </p>
       </div>
     </div>
@@ -286,19 +331,9 @@ export default function Register() {
         </div>
       )}
 
-      {/* Step: Done */}
+      {/* Step: Done — auto redirect to dashboard */}
       {step === 'done' && (
-        <div style={{ textAlign: 'center', paddingTop: 40 }}>
-          <div style={{ fontSize: 80, marginBottom: 16 }}>🎉</div>
-          <h2 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 8px' }}>
-            {lang === 'runyoro' ? 'Wajimu!' : lang === 'luganda' ? 'Wandiise!' : 'Registration Complete!'}
-          </h2>
-          <p style={{ color: '#6b7280', fontSize: 16, marginBottom: 8 }}>Welcome to Kyenjojo SACCO, <strong>{form.full_name}</strong>!</p>
-          <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 32 }}>Your account will be activated within 24 hours. Visit the SACCO office in Kyenjojo Town to complete verification.</p>
-          <button onClick={() => router.push('/farmer/dashboard')} style={btnStyle}>
-            🏠 Go to My Dashboard
-          </button>
-        </div>
+        <DoneRedirect lang={lang} router={router} />
       )}
     </div>
   )
