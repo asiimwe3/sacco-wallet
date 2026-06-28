@@ -4,6 +4,73 @@ import { useRouter } from 'next/navigation'
 
 type Step = 'language' | 'personal' | 'farm' | 'gps' | 'consent' | 'done'
 
+
+function DoneStep({ lang, router, form }: { lang: string; router: ReturnType<typeof import('next/navigation').useRouter>; form: Record<string, unknown> }) {
+  const [countdown, setCountdown] = useState(3)
+
+  useEffect(() => {
+    // Save farmer name so dashboard can greet them
+    if (typeof window !== 'undefined' && form.full_name) {
+      localStorage.setItem('sacco_farmer_name', form.full_name as string)
+      localStorage.setItem('sacco_farmer_village', form.village as string || '')
+    }
+    const t = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(t)
+          router.push('/farmer/dashboard')
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(t)
+  }, [router, form])
+
+  return (
+    <div style={{ textAlign: 'center', paddingTop: 40 }}>
+      <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
+      <h2 style={{ margin: '0 0 8px', fontSize: 28, fontWeight: 900, color: '#1a1a1a' }}>
+        {lang === 'runyoro' ? 'Kwesaba Kwaganuwe!' : lang === 'luganda' ? 'Wandiika Waganuwe!' : 'Registration Saved!'}
+      </h2>
+      <p style={{ color: '#6b7280', fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>
+        {lang === 'runyoro'
+          ? 'Obusingye bwawe bubikiriwe kuri device kuno.'
+          : lang === 'luganda'
+          ? 'Ebyofaako byo bisinziiriddwa ku device eno.'
+          : 'Your details are saved on this device and will sync to the SACCO database when online.'}
+      </p>
+
+      {/* Countdown + progress */}
+      <div style={{ background: '#1a6b3a', borderRadius: 20, padding: 20, color: 'white', margin: '20px 0' }}>
+        <div style={{ fontSize: 40, fontWeight: 900 }}>{countdown}</div>
+        <p style={{ margin: '4px 0 0', opacity: 0.9, fontSize: 15, fontWeight: 600 }}>
+          Opening your dashboard...
+        </p>
+        <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 99, height: 6, marginTop: 12 }}>
+          <div style={{ background: '#d4a017', height: '100%', borderRadius: 99, width: `${((3 - countdown) / 3) * 100}%`, transition: 'width 0.9s ease' }} />
+        </div>
+      </div>
+
+      <button onClick={() => router.push('/farmer/dashboard')}
+        style={{ display: 'block', width: '100%', background: '#1a6b3a', color: 'white', border: 'none', borderRadius: 16, padding: '16px', fontWeight: 700, fontSize: 18, cursor: 'pointer', marginBottom: 12 }}>
+        🏠 Go to Dashboard Now
+      </button>
+
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 16, padding: 16 }}>
+        <p style={{ fontWeight: 700, color: '#1d4ed8', marginBottom: 4 }}>Next steps:</p>
+        <p style={{ color: '#1d4ed8', fontSize: 14, margin: 0 }}>
+          {lang === 'runyoro'
+            ? 'Omurusha wa SACCO azaza kuhinzira lyawe mu mazoba 5-7.'
+            : lang === 'luganda'
+            ? 'Omukozi wa SACCO ajja ku nnimiro yo mu nnaku 5-7.'
+            : 'A SACCO field officer will visit your farm within 5–7 days to verify and activate your wallet.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function Register() {
   const router = useRouter()
   const [step, setStep] = useState<Step>('language')
@@ -211,7 +278,7 @@ export default function Register() {
             <p><strong>Your rights:</strong> You can request to see, correct, or delete your data at any time by visiting our SACCO office in Kyenjojo Town.</p>
             <p><strong>Security:</strong> All data is encrypted and stored securely.</p>
           </div>
-          <button onClick={() => setStep('done')}
+          <button onClick={() => setStep('done'); setTimeout(() => router.push('/farmer/dashboard'), 3000)}
             style={{ ...btnStyle, background: '#1a6b3a' }}>
             ✅ I Agree — Create My Account
           </button>
