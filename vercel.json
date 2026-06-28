@@ -1,0 +1,9 @@
+{
+  "buildCommand": "next build",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@sacco_supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@sacco_supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@sacco_service_role_key"
+  }
+}

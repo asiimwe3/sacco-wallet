@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { AuthProvider } from '@/context/AuthContext'
 
 export const metadata: Metadata = {
   title: 'SACCO Wallet — Kyenjojo Farmers',
@@ -9,10 +10,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#1a6b3a',
+  width: 'device-width', initialScale: 1, maximumScale: 1, themeColor: '#1a6b3a',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,7 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="format-detection" content="telephone=no" />
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   )
 }

@@ -1,190 +1,158 @@
 'use client'
-import { useState } from 'react'
-import Link from 'next/link'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
-const STATS = {
-  total_farmers: 247,
-  active_loans: 89,
-  total_savings: 48750000,
-  total_loans_disbursed: 125000000,
-  repayment_rate: 91.3,
-  new_this_month: 12,
-}
-
-const RECENT_FARMERS = [
-  { id: '1', name: 'Amanya Katusiime', village: 'Butebo', savings: 485000, loan: 200000, score: 72, grade: 'B', status: 'active' },
-  { id: '2', name: 'Birungi Joyce', village: 'Kyarusozi', savings: 320000, loan: 0, score: 85, grade: 'A', status: 'active' },
-  { id: '3', name: 'Mugisha Robert', village: 'Mpara', savings: 150000, loan: 500000, score: 48, grade: 'C', status: 'active' },
-  { id: '4', name: 'Kahwa Beatrice', village: 'Nyabuharwa', savings: 780000, loan: 1000000, score: 78, grade: 'B', status: 'active' },
-  { id: '5', name: 'Tusiime Patrick', village: 'Butunduzi', savings: 95000, loan: 0, score: 35, grade: 'D', status: 'pending' },
-]
-
-const PENDING_LOANS = [
-  { id: '1', farmer: 'Mugisha Robert', amount: 300000, purpose: 'Buying seeds and fertilizer', days_ago: 2, score: 48 },
-  { id: '2', farmer: 'Kasande Mary', amount: 750000, purpose: 'Farm equipment', days_ago: 1, score: 65 },
-  { id: '3', farmer: 'Byamukama John', amount: 1500000, purpose: 'Building/housing', days_ago: 0, score: 82 },
-]
+interface Stats { farmers:number; activeLoans:number; savings:number; disbursed:number; repaymentRate:number }
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'overview'|'loans'|'farmers'>('overview')
+  const { profile, signOut, loading: authLoading } = useAuth()
+  const router = useRouter()
+  const [tab, setTab]       = useState<'overview'|'loans'|'farmers'>('overview')
+  const [stats, setStats]   = useState<Stats>({ farmers:0, activeLoans:0, savings:0, disbursed:0, repaymentRate:0 })
+  const [farmers, setFarmers] = useState<{ id:string; full_name:string; village:string|null; created_at:string }[]>([])
+  const [loans, setLoans]   = useState<{ id:string; amount:number; purpose:string; status:string; profiles:{ full_name:string }|null; created_at:string }[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
+  const fmt = (n:number) => `UGX ${n.toLocaleString()}`
 
-  const fmt = (n: number) => `UGX ${n.toLocaleString()}`
+  // Auth guard — admin/field_officer only
+  useEffect(() => {
+    if (!authLoading && profile && !['admin','field_officer'].includes(profile.role)) router.push('/farmer/dashboard')
+  }, [authLoading, profile, router])
+
+  useEffect(() => {
+    async function load() {
+      const [{ data:f },{ data:l },{ data:w }] = await Promise.all([
+        supabase.from('profiles').select('id,full_name,village,created_at').eq('role','farmer').order('created_at',{ascending:false}),
+        supabase.from('loans').select('id,amount,purpose,status,created_at,profiles(full_name)').order('created_at',{ascending:false}).limit(50),
+        supabase.from('wallets').select('savings_balance,balance'),
+      ])
+      if (f) setFarmers(f)
+      if (l) {
+        setLoans(l as typeof loans)
+        const active = l.filter((x:{ status:string })=>x.status==='active')
+        const repaid = l.filter((x:{ status:string })=>x.status==='repaid')
+        const rate = l.length > 0 ? ((repaid.length + active.length) / l.length) * 100 : 0
+        const totalDisbursed = l.filter((x:{ status:string; amount:number })=>['active','repaid'].includes(x.status)).reduce((s:number,x:{ amount:number })=>s+x.amount, 0)
+        if (w) {
+          const totalSavings = w.reduce((s:number,x:{ savings_balance:number })=>s+x.savings_balance, 0)
+          setStats({ farmers: f?.length || 0, activeLoans: active.length, savings: totalSavings, disbursed: totalDisbursed, repaymentRate: Math.round(rate * 10)/10 })
+        }
+      }
+      setDataLoading(false)
+    }
+    load()
+  }, [])
+
+  async function updateLoanStatus(id: string, status: string) {
+    await supabase.from('loans').update({ status }).eq('id', id)
+    setLoans(prev => prev.map(l => l.id===id ? { ...l, status } : l))
+  }
+
+  if (authLoading || dataLoading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh' }}><span style={{ fontSize:40 }}>⏳</span></div>
+
+  const pendingLoans = loans.filter(l => l.status === 'pending')
+  const statusColor: Record<string,string> = { pending:'#d97706', active:'#16a34a', approved:'#2563eb', repaid:'#6b7280', rejected:'#dc2626' }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f7f2' }}>
+    <div style={{ minHeight:'100vh', background:'#f5f7f2' }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', padding: '20px 20px 16px', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background:'linear-gradient(135deg,#1a1a2e,#16213e)', padding:'20px 20px 0', color:'white' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>⚙️ SACCO Admin</h1>
-            <p style={{ margin: 0, fontSize: 13, opacity: 0.7 }}>Kyenjojo Farmers SACCO</p>
+            <h1 style={{ margin:0, fontSize:22, fontWeight:800 }}>⚙️ SACCO Admin</h1>
+            <p style={{ margin:0, fontSize:13, opacity:0.7 }}>Kyenjojo Farmers SACCO • {profile?.full_name}</p>
           </div>
-          <Link href="/" style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, textDecoration: 'none' }}>Logout</Link>
+          <button onClick={async () => { await signOut(); router.push('/') }}
+            style={{ color:'rgba(255,255,255,0.7)', fontSize:13, background:'none', border:'none', cursor:'pointer' }}>Logout</button>
         </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, marginTop: 16, background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 4 }}>
-          {(['overview','loans','farmers'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              style={{ flex: 1, background: activeTab === tab ? 'white' : 'transparent', color: activeTab === tab ? '#1a1a2e' : 'rgba(255,255,255,0.7)', border: 'none', borderRadius: 10, padding: '8px 4px', fontWeight: 700, fontSize: 13, cursor: 'pointer', textTransform: 'capitalize' }}>
-              {tab}
+        <div style={{ display:'flex', gap:4, background:'rgba(255,255,255,0.1)', borderRadius:12, padding:4, marginBottom:0 }}>
+          {(['overview','loans','farmers'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ flex:1, background: tab===t ? 'white' : 'transparent', color: tab===t ? '#1a1a2e' : 'rgba(255,255,255,0.7)', border:'none', borderRadius:10, padding:'8px 4px', fontWeight:700, fontSize:13, cursor:'pointer', textTransform:'capitalize' }}>
+              {t} {t==='loans' && pendingLoans.length > 0 && <span style={{ background:'#ef4444', color:'white', borderRadius:999, padding:'1px 6px', fontSize:11 }}>{pendingLoans.length}</span>}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: 16 }}>
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
+      <div style={{ padding:16 }}>
+        {tab === 'overview' && (
           <>
-            {/* KPI Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
               {[
-                { label: 'Total Farmers', value: STATS.total_farmers.toString(), icon: '👨‍🌾', color: '#1a6b3a' },
-                { label: 'Active Loans', value: STATS.active_loans.toString(), icon: '🤝', color: '#2563eb' },
-                { label: 'Total Savings', value: fmt(STATS.total_savings), icon: '💰', color: '#d97706' },
-                { label: 'Repayment Rate', value: `${STATS.repayment_rate}%`, icon: '📊', color: '#7c3aed' },
+                { l:'Total Farmers', v:stats.farmers, i:'👨‍🌾', c:'#1a6b3a' },
+                { l:'Active Loans', v:stats.activeLoans, i:'🤝', c:'#2563eb' },
+                { l:'Total Savings', v:fmt(stats.savings), i:'💰', c:'#d97706' },
+                { l:'Repayment Rate', v:`${stats.repaymentRate}%`, i:'📊', c:'#7c3aed' },
               ].map(kpi => (
-                <div key={kpi.label} className="card" style={{ textAlign: 'center' }}>
-                  <span style={{ fontSize: 32 }}>{kpi.icon}</span>
-                  <p style={{ margin: '8px 0 2px', fontWeight: 800, fontSize: 20, color: kpi.color }}>{kpi.value}</p>
-                  <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{kpi.label}</p>
+                <div key={kpi.l} className="card" style={{ textAlign:'center' }}>
+                  <span style={{ fontSize:28 }}>{kpi.i}</span>
+                  <p style={{ margin:'8px 0 2px', fontWeight:800, fontSize:18, color:kpi.c }}>{kpi.v}</p>
+                  <p style={{ margin:0, color:'#6b7280', fontSize:12 }}>{kpi.l}</p>
                 </div>
               ))}
             </div>
-
-            {/* Alerts */}
-            <div className="card" style={{ marginBottom: 16, background: '#fef3c7', border: '1px solid #fcd34d' }}>
-              <p style={{ margin: '0 0 4px', fontWeight: 700, color: '#92400e' }}>⚠️ {PENDING_LOANS.length} Loan Applications Pending</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#78350f' }}>Review and approve or reject within 48 hours.</p>
-              <button onClick={() => setActiveTab('loans')}
-                style={{ marginTop: 8, background: '#d97706', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-                Review Now →
-              </button>
-            </div>
-
-            {/* Monthly Summary */}
-            <div className="card" style={{ marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 12px', color: '#374151' }}>📈 This Month</h4>
-              {[
-                { label: 'New Members', value: `+${STATS.new_this_month}` },
-                { label: 'Loans Disbursed', value: 'UGX 8,200,000' },
-                { label: 'Repayments Received', value: 'UGX 5,400,000' },
-                { label: 'Savings Deposited', value: 'UGX 3,750,000' },
-              ].map(item => (
-                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-                  <span style={{ color: '#6b7280', fontSize: 14 }}>{item.label}</span>
-                  <span style={{ fontWeight: 700, color: '#1a6b3a' }}>{item.value}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick Links */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Link href="/admin/farmers" style={{ background: '#1a6b3a', color: 'white', borderRadius: 16, padding: '16px', fontWeight: 700, fontSize: 15, textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-                👨‍🌾 Manage Farmers
-              </Link>
-              <Link href="/admin/reports" style={{ background: '#1e40af', color: 'white', borderRadius: 16, padding: '16px', fontWeight: 700, fontSize: 15, textDecoration: 'none', textAlign: 'center', display: 'block' }}>
-                📊 Reports
-              </Link>
-            </div>
+            {pendingLoans.length > 0 && (
+              <>
+                <h3 style={{ margin:'0 0 12px', fontSize:17, fontWeight:700 }}>⏳ Pending Loan Approvals ({pendingLoans.length})</h3>
+                {pendingLoans.map(l => (
+                  <div key={l.id} className="card" style={{ marginBottom:12 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                      <div>
+                        <p style={{ margin:0, fontWeight:700 }}>{(l.profiles as {full_name:string}|null)?.full_name || 'Unknown'}</p>
+                        <p style={{ margin:0, color:'#6b7280', fontSize:13 }}>{l.purpose?.slice(0,50)}</p>
+                      </div>
+                      <p style={{ margin:0, fontWeight:800, color:'#1a6b3a', fontSize:16 }}>{fmt(l.amount)}</p>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                      <button onClick={() => updateLoanStatus(l.id,'approved')}
+                        style={{ background:'#dcfce7', color:'#16a34a', border:'none', borderRadius:10, padding:'10px', fontWeight:700, cursor:'pointer' }}>✅ Approve</button>
+                      <button onClick={() => updateLoanStatus(l.id,'rejected')}
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:10, padding:'10px', fontWeight:700, cursor:'pointer' }}>❌ Reject</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </>
         )}
 
-        {/* Loans Tab */}
-        {activeTab === 'loans' && (
+        {tab === 'loans' && (
           <>
-            <h3 style={{ margin: '0 0 12px', fontSize: 17, fontWeight: 700 }}>🤝 Pending Loan Applications</h3>
-            {PENDING_LOANS.map(loan => (
-              <div key={loan.id} className="card" style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 16 }}>{loan.farmer}</p>
-                    <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>{loan.days_ago === 0 ? 'Today' : `${loan.days_ago}d ago`} • {loan.purpose}</p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontWeight: 800, fontSize: 18, color: '#1e40af' }}>{fmt(loan.amount)}</p>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: loan.score >= 70 ? '#16a34a' : loan.score >= 50 ? '#d97706' : '#dc2626' }}>
-                      Score: {loan.score}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <button style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: 12, padding: '12px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-                    ✅ Approve
-                  </button>
-                  <button style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 12, padding: '12px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
-                    ❌ Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            <h3 style={{ margin: '20px 0 12px', fontSize: 17, fontWeight: 700 }}>📋 Active Loans</h3>
-            {RECENT_FARMERS.filter(f => f.loan > 0).map(f => (
-              <div key={f.id} className="card" style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:17, fontWeight:700 }}>All Loans ({loans.length})</h3>
+            {loans.map(l => (
+              <div key={l.id} className="card" style={{ marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 600 }}>{f.name}</p>
-                  <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>📍 {f.village}</p>
+                  <p style={{ margin:0, fontWeight:700, fontSize:14 }}>{(l.profiles as {full_name:string}|null)?.full_name || 'Unknown'}</p>
+                  <p style={{ margin:0, color:'#6b7280', fontSize:12 }}>{fmt(l.amount)} • {l.purpose?.slice(0,30)}</p>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ margin: 0, fontWeight: 700, color: '#dc2626' }}>{fmt(f.loan)}</p>
-                  <span className="badge badge-yellow">Active</span>
+                <div style={{ textAlign:'right' }}>
+                  <span style={{ background: statusColor[l.status]+'22', color: statusColor[l.status], borderRadius:999, padding:'4px 10px', fontSize:12, fontWeight:700, display:'block', textTransform:'capitalize' }}>{l.status}</span>
+                  {l.status === 'pending' && (
+                    <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                      <button onClick={() => updateLoanStatus(l.id,'approved')} style={{ background:'#dcfce7', color:'#16a34a', border:'none', borderRadius:6, padding:'4px 8px', fontSize:11, fontWeight:700, cursor:'pointer' }}>✅</button>
+                      <button onClick={() => updateLoanStatus(l.id,'rejected')} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'4px 8px', fontSize:11, fontWeight:700, cursor:'pointer' }}>❌</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </>
         )}
 
-        {/* Farmers Tab */}
-        {activeTab === 'farmers' && (
+        {tab === 'farmers' && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>👨‍🌾 All Farmers ({STATS.total_farmers})</h3>
-              <span style={{ background: '#dcfce7', color: '#16a34a', borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 700 }}>+{STATS.new_this_month} this month</span>
-            </div>
-            {RECENT_FARMERS.map(f => (
-              <div key={f.id} className="card" style={{ marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{f.name}</p>
-                    <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>📍 {f.village}</p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: f.score >= 70 ? '#16a34a' : f.score >= 50 ? '#d97706' : '#dc2626' }}>
-                      Score: {f.score} ({f.grade})
-                    </span>
-                    <br />
-                    <span style={{ fontSize: 12, color: f.status === 'active' ? '#16a34a' : '#d97706' }}>● {f.status}</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
-                  <span>💰 {fmt(f.savings)}</span>
-                  <span style={{ color: f.loan > 0 ? '#dc2626' : '#16a34a' }}>🤝 {f.loan > 0 ? fmt(f.loan) + ' loan' : 'No loan'}</span>
+            <h3 style={{ margin:'0 0 12px', fontSize:17, fontWeight:700 }}>All Farmers ({farmers.length})</h3>
+            {farmers.map(f => (
+              <div key={f.id} className="card" style={{ marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <p style={{ margin:0, fontWeight:700, fontSize:14 }}>👨‍🌾 {f.full_name}</p>
+                  <p style={{ margin:0, color:'#6b7280', fontSize:12 }}>📍 {f.village || 'Kyenjojo'} • Joined {f.created_at.slice(0,10)}</p>
                 </div>
               </div>
             ))}
-            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 13, marginTop: 12 }}>Showing 5 of {STATS.total_farmers} farmers</p>
           </>
         )}
       </div>

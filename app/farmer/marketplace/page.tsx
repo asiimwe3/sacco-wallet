@@ -1,251 +1,158 @@
 'use client'
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
-type AccountType = 'farmer' | 'trader' | 'vendor' | 'store'
-type Category = 'all' | 'crops' | 'livestock' | 'tools' | 'produce' | 'services' | 'seeds'
+interface Listing { id:string; seller_name:string; seller_village:string; seller_type:string; title:string; description:string; price:number; unit:string; quantity_available:number; category:string; phone:string; whatsapp:string; posted_date:string; is_negotiable:boolean; delivery_available:boolean; rating:number|null; reviews:number|null }
 
-interface Listing {
-  id: string
-  seller_name: string
-  seller_type: AccountType
-  seller_village: string
-  title: string
-  description: string
-  price: number
-  unit: string
-  quantity_available: number
-  category: Category
-  images: string[]
-  phone: string
-  whatsapp: string
-  posted_date: string
-  is_negotiable: boolean
-  delivery_available: boolean
-  rating: number
-  reviews: number
-}
-
-// Demo listings representing real market data
-const DEMO_LISTINGS: Listing[] = [
-  { id:'1', seller_name:'Amanya Katusiime', seller_type:'farmer', seller_village:'Butebo', title:'Fresh Maize (Dry)', description:'Dry maize from our farm, clean and ready for grinding. Good for posho mills.', price:1800, unit:'kg', quantity_available:500, category:'crops', images:['🌽'], phone:'0750123456', whatsapp:'256750123456', posted_date:'2026-06-27', is_negotiable:true, delivery_available:false, rating:4.5, reviews:12 },
-  { id:'2', seller_name:'Birungi Joyce', seller_type:'farmer', seller_village:'Kyarusozi', title:'Irish Potatoes', description:'Fresh Irish potatoes, medium size. Harvested this week. Sweet and firm.', price:1200, unit:'kg', quantity_available:300, category:'crops', images:['🥔'], phone:'0782067425', whatsapp:'256782067425', posted_date:'2026-06-26', is_negotiable:true, delivery_available:true, rating:4.8, reviews:20 },
-  { id:'3', seller_name:'Kyenjojo Agro Traders', seller_type:'trader', seller_village:'Kyenjojo Town', title:'Hybrid Maize Seeds (H614)', description:'Certified hybrid maize seeds. High yield variety. Treated and ready to plant.', price:45000, unit:'2kg bag', quantity_available:50, category:'seeds', images:['🌱'], phone:'0772002326', whatsapp:'256772002326', posted_date:'2026-06-25', is_negotiable:false, delivery_available:true, rating:4.9, reviews:35 },
-  { id:'4', seller_name:'Mugisha Farm Tools', seller_type:'store', seller_village:'Mpara', title:'Hand Hoes (Jembe)', description:'Strong steel hand hoes, wooden handle. Perfect for garden work. Bulk orders welcome.', price:22000, unit:'piece', quantity_available:100, category:'tools', images:['⛏️'], phone:'0750414366', whatsapp:'256750414366', posted_date:'2026-06-24', is_negotiable:true, delivery_available:false, rating:4.2, reviews:8 },
-  { id:'5', seller_name:'Kahwa Poultry Farm', seller_type:'farmer', seller_village:'Nyabuharwa', title:'Live Chickens (Kienyeji)', description:'Local breed chickens. Good for meat and eggs. Vaccinated and healthy. Minimum 5 birds.', price:25000, unit:'bird', quantity_available:40, category:'livestock', images:['🐓'], phone:'0750999888', whatsapp:'256750999888', posted_date:'2026-06-23', is_negotiable:true, delivery_available:false, rating:4.6, reviews:15 },
-  { id:'6', seller_name:'Tusiime Fresh Produce', seller_type:'vendor', seller_village:'Butunduzi', title:'Matoke (Cooking Banana)', description:'Fresh green matoke bunches. Ready to cook. From our organic banana plantation.', price:8000, unit:'bunch', quantity_available:200, category:'produce', images:['🍌'], phone:'0700123456', whatsapp:'256700123456', posted_date:'2026-06-27', is_negotiable:false, delivery_available:true, rating:4.3, reviews:6 },
-  { id:'7', seller_name:'AgriService Kyenjojo', seller_type:'store', seller_village:'Kyenjojo Town', title:'Land Ploughing Service', description:'Tractor ploughing service available. One acre from UGX 120,000. Call to schedule.', price:120000, unit:'acre', quantity_available:999, category:'services', images:['🚜'], phone:'0782500000', whatsapp:'256782500000', posted_date:'2026-06-20', is_negotiable:true, delivery_available:true, rating:4.7, reviews:28 },
-  { id:'8', seller_name:'Byamukama Robert', seller_type:'farmer', seller_village:'Butunduzi', title:'Beans (Nambale)', description:'Dry climbing beans, Nambale variety. Excellent quality. Sorted and clean.', price:4500, unit:'kg', quantity_available:150, category:'crops', images:['🫘'], phone:'0750777888', whatsapp:'256750777888', posted_date:'2026-06-26', is_negotiable:true, delivery_available:false, rating:4.1, reviews:4 },
+const DEMO: Listing[] = [
+  { id:'d1', seller_name:'Amanya Katusiime', seller_village:'Butebo', seller_type:'farmer', title:'Fresh Maize (Dry)', description:'Dry maize from our farm, clean and ready for grinding.', price:1800, unit:'kg', quantity_available:500, category:'crops', phone:'0750123456', whatsapp:'256750123456', posted_date:new Date().toISOString().slice(0,10), is_negotiable:true, delivery_available:false, rating:4.5, reviews:12 },
+  { id:'d2', seller_name:'Birungi Joyce', seller_village:'Kyarusozi', seller_type:'farmer', title:'Irish Potatoes', description:'Fresh Irish potatoes, medium size. Harvested this week.', price:1200, unit:'kg', quantity_available:300, category:'crops', phone:'0782067425', whatsapp:'256782067425', posted_date:new Date().toISOString().slice(0,10), is_negotiable:true, delivery_available:true, rating:4.8, reviews:20 },
+  { id:'d3', seller_name:'Kyenjojo Agro Traders', seller_village:'Kyenjojo Town', seller_type:'trader', title:'Hybrid Maize Seeds (H614)', description:'Certified hybrid maize seeds. High yield variety.', price:45000, unit:'2kg bag', quantity_available:50, category:'seeds', phone:'0772002326', whatsapp:'256772002326', posted_date:new Date().toISOString().slice(0,10), is_negotiable:false, delivery_available:true, rating:4.9, reviews:35 },
+  { id:'d4', seller_name:'Kahwa Poultry Farm', seller_village:'Nyabuharwa', seller_type:'farmer', title:'Live Chickens (Kienyeji)', description:'Local breed chickens. Vaccinated and healthy.', price:25000, unit:'bird', quantity_available:40, category:'livestock', phone:'0750999888', whatsapp:'256750999888', posted_date:new Date().toISOString().slice(0,10), is_negotiable:true, delivery_available:false, rating:4.6, reviews:15 },
+  { id:'d5', seller_name:'AgriService Kyenjojo', seller_village:'Kyenjojo Town', seller_type:'store', title:'Land Ploughing Service', description:'Tractor ploughing service. One acre from UGX 120,000.', price:120000, unit:'acre', quantity_available:999, category:'services', phone:'0782500000', whatsapp:'256782500000', posted_date:new Date().toISOString().slice(0,10), is_negotiable:true, delivery_available:true, rating:4.7, reviews:28 },
+  { id:'d6', seller_name:'Mugisha Farm Tools', seller_village:'Mpara', seller_type:'store', title:'Hand Hoes (Jembe)', description:'Strong steel hand hoes, wooden handle.', price:22000, unit:'piece', quantity_available:100, category:'tools', phone:'0750414366', whatsapp:'256750414366', posted_date:new Date().toISOString().slice(0,10), is_negotiable:true, delivery_available:false, rating:4.2, reviews:8 },
 ]
-
-const CATEGORIES = [
-  { key:'all', label:'All', icon:'🛍️' },
-  { key:'crops', label:'Crops', icon:'🌾' },
-  { key:'produce', label:'Produce', icon:'🥬' },
-  { key:'livestock', label:'Animals', icon:'🐄' },
-  { key:'seeds', label:'Seeds', icon:'🌱' },
-  { key:'tools', label:'Tools', icon:'🔧' },
-  { key:'services', label:'Services', icon:'🚜' },
-]
-
-const ACCOUNT_TYPE_COLORS: Record<AccountType, string> = {
-  farmer: '#1a6b3a',
-  trader: '#2563eb',
-  vendor: '#d97706',
-  store: '#7c3aed',
-}
-
-const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  farmer: '👨‍🌾 Farmer',
-  trader: '🤝 Trader',
-  vendor: '🛒 Vendor',
-  store: '🏪 Store',
-}
+const CATS = [{ k:'all',l:'All',i:'🛍️' },{ k:'crops',l:'Crops',i:'🌾' },{ k:'livestock',l:'Animals',i:'🐄' },{ k:'seeds',l:'Seeds',i:'🌱' },{ k:'tools',l:'Tools',i:'🔧' },{ k:'services',l:'Services',i:'🚜' }]
+const TYPE_COLORS: Record<string,string> = { farmer:'#1a6b3a', trader:'#2563eb', vendor:'#d97706', store:'#7c3aed' }
 
 export default function Marketplace() {
-  const [category, setCategory] = useState<Category>('all')
+  const { user, profile } = useAuth()
+  const [listings, setListings] = useState<Listing[]>(DEMO)
+  const [cat, setCat]   = useState('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Listing|null>(null)
   const [showSell, setShowSell] = useState(false)
+  const [form, setForm] = useState({ title:'', description:'', price:'', unit:'kg', quantity:'', category:'crops', phone:'', is_negotiable:false, delivery_available:false })
+  const [posting, setPosting] = useState(false)
+  const [postSuccess, setPostSuccess] = useState(false)
+  const fmt = (n:number) => `UGX ${n.toLocaleString()}`
 
-  const filtered = DEMO_LISTINGS.filter(l =>
-    (category === 'all' || l.category === category) &&
-    (search === '' || l.title.toLowerCase().includes(search.toLowerCase()) ||
-     l.description.toLowerCase().includes(search.toLowerCase()) ||
-     l.seller_village.toLowerCase().includes(search.toLowerCase()))
-  )
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('marketplace_listings').select('*').eq('is_active', true).order('posted_date', { ascending:false }).limit(50)
+      if (data && data.length > 0) setListings([...data, ...DEMO.filter(d => !data.find((r:Listing)=>r.id===d.id))])
+    }
+    load()
+  }, [])
 
-  const fmt = (n: number) => `UGX ${n.toLocaleString()}`
-
-  if (selected) {
-    return (
-      <div style={{ padding: 16 }}>
-        <button onClick={() => setSelected(null)}
-          style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', marginBottom: 12, padding: 0, minHeight: 0 }}>
-          ← Back
-        </button>
-
-        {/* Product detail */}
-        <div style={{ fontSize: 80, textAlign: 'center', padding: 24, background: 'white', borderRadius: 20, marginBottom: 16 }}>
-          {selected.images[0]}
-        </div>
-
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, flex: 1 }}>{selected.title}</h2>
-            {selected.is_negotiable && (
-              <span style={{ background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 99, marginLeft: 8, whiteSpace: 'nowrap' }}>Negotiable</span>
-            )}
-          </div>
-          <p style={{ margin: '0 0 12px', fontSize: 28, fontWeight: 800, color: '#1a6b3a' }}>
-            {fmt(selected.price)} <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>/ {selected.unit}</span>
-          </p>
-          <p style={{ margin: '0 0 12px', color: '#374151', lineHeight: 1.6 }}>{selected.description}</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ background: '#f0fdf4', color: '#1a6b3a', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>
-              📦 {selected.quantity_available} {selected.unit}s available
-            </span>
-            {selected.delivery_available && (
-              <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>
-                🚚 Delivery available
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Seller info */}
-        <div className="card" style={{ marginBottom: 12 }}>
-          <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: 15 }}>Seller Information</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: ACCOUNT_TYPE_COLORS[selected.seller_type], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-              {selected.seller_type === 'farmer' ? '👨‍🌾' : selected.seller_type === 'trader' ? '🤝' : selected.seller_type === 'vendor' ? '🛒' : '🏪'}
-            </div>
-            <div>
-              <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{selected.seller_name}</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>📍 {selected.seller_village}</p>
-              <span style={{ background: ACCOUNT_TYPE_COLORS[selected.seller_type] + '20', color: ACCOUNT_TYPE_COLORS[selected.seller_type], fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99 }}>
-                {ACCOUNT_TYPE_LABELS[selected.seller_type]}
-              </span>
-            </div>
-            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-              <p style={{ margin: 0, fontWeight: 700, color: '#d97706' }}>⭐ {selected.rating}</p>
-              <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{selected.reviews} reviews</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Contact buttons */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <a href={`tel:${selected.phone}`}
-            style={{ flex: 1, display: 'block', textAlign: 'center', background: '#1a6b3a', color: 'white', padding: '14px', borderRadius: 14, fontWeight: 700, fontSize: 16, textDecoration: 'none' }}>
-            📞 Call Seller
-          </a>
-          <a href={`https://wa.me/${selected.whatsapp}?text=Hi, I saw your listing for ${encodeURIComponent(selected.title)} on SACCO Wallet Marketplace.`}
-            target="_blank" rel="noopener"
-            style={{ flex: 1, display: 'block', textAlign: 'center', background: '#25d366', color: 'white', padding: '14px', borderRadius: 14, fontWeight: 700, fontSize: 16, textDecoration: 'none' }}>
-            💬 WhatsApp
-          </a>
-        </div>
-      </div>
-    )
+  async function handlePost() {
+    if (!profile || !user) return
+    setPosting(true)
+    await supabase.from('marketplace_listings').insert({
+      seller_id: user.id, seller_name: profile.full_name, seller_village: profile.village || 'Kyenjojo',
+      seller_type: 'farmer', title: form.title, description: form.description,
+      price: parseFloat(form.price), unit: form.unit, quantity_available: parseInt(form.quantity) || 0,
+      category: form.category, phone: profile.phone_number || form.phone,
+      whatsapp: (profile.phone_number || form.phone)?.replace(/^0/,'256'),
+      posted_date: new Date().toISOString().slice(0,10), is_negotiable: form.is_negotiable,
+      delivery_available: form.delivery_available, is_active: true,
+    })
+    setPosting(false); setPostSuccess(true); setShowSell(false)
+    setTimeout(() => setPostSuccess(false), 4000)
   }
 
-  return (
-    <div style={{ padding: '0 0 16px' }}>
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #1a6b3a, #2d9e56)', padding: '16px 16px 20px', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+  const filtered = listings.filter(l => (cat==='all' || l.category===cat) && (search==='' || l.title.toLowerCase().includes(search.toLowerCase()) || l.seller_village.toLowerCase().includes(search.toLowerCase())))
+
+  if (selected) return (
+    <div style={{ padding:16 }}>
+      <button onClick={() => setSelected(null)} style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:'#374151', marginBottom:16, display:'flex', alignItems:'center', gap:6 }}>← Back</button>
+      <div className="card" style={{ marginBottom:12 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>🏪 Marketplace</h2>
-            <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>Buy & sell in Kyenjojo district</p>
+            <p style={{ margin:0, fontWeight:800, fontSize:20 }}>{fmt(selected.price)}<span style={{ fontSize:14, fontWeight:500, color:'#6b7280' }}>/{selected.unit}</span></p>
+            {selected.is_negotiable && <span className="badge badge-green" style={{ marginTop:4 }}>Negotiable</span>}
           </div>
-          <button onClick={() => setShowSell(true)}
-            style={{ background: '#d4a017', color: '#1a1a1a', border: 'none', borderRadius: 20, padding: '8px 16px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-            + Sell
-          </button>
+          <span style={{ background: TYPE_COLORS[selected.seller_type]+'22', color: TYPE_COLORS[selected.seller_type], borderRadius:999, padding:'4px 10px', fontSize:12, fontWeight:700, textTransform:'capitalize' }}>{selected.seller_type}</span>
         </div>
-
-        {/* Search */}
-        <input
-          type="text"
-          placeholder="🔍 Search crops, tools, services..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}
-        />
+        <h2 style={{ margin:'0 0 8px', fontSize:22, fontWeight:800 }}>{selected.title}</h2>
+        <p style={{ color:'#6b7280', lineHeight:1.6 }}>{selected.description}</p>
+        <div style={{ borderTop:'1px solid #f3f4f6', paddingTop:12, marginTop:12 }}>
+          {[['👤 Seller', selected.seller_name],['📍 Village', selected.seller_village],['📦 Available', `${selected.quantity_available} ${selected.unit}`],['🚚 Delivery', selected.delivery_available ? 'Available' : 'No delivery'],['📅 Posted', selected.posted_date]].map(([l,v]) => (
+            <div key={l} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f9fafb' }}>
+              <span style={{ color:'#6b7280', fontSize:14 }}>{l}</span><span style={{ fontWeight:600, fontSize:14 }}>{v}</span>
+            </div>
+          ))}
+        </div>
       </div>
+      <a href={`tel:${selected.phone}`} style={{ display:'block', background:'#1a6b3a', color:'white', textAlign:'center', padding:'16px', borderRadius:16, fontWeight:700, fontSize:18, textDecoration:'none', marginBottom:12 }}>📞 Call Seller</a>
+      <a href={`https://wa.me/${selected.whatsapp}?text=Hi, I'm interested in your listing: ${selected.title}`} target="_blank" rel="noopener noreferrer"
+        style={{ display:'block', background:'#25d366', color:'white', textAlign:'center', padding:'16px', borderRadius:16, fontWeight:700, fontSize:18, textDecoration:'none' }}>💬 WhatsApp</a>
+    </div>
+  )
 
-      {/* Category pills */}
-      <div style={{ display: 'flex', gap: 8, padding: '12px 16px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {CATEGORIES.map(cat => (
-          <button key={cat.key} onClick={() => setCategory(cat.key as Category)}
-            style={{ whiteSpace: 'nowrap', background: category === cat.key ? '#1a6b3a' : 'white', color: category === cat.key ? 'white' : '#374151', border: category === cat.key ? 'none' : '1px solid #e5e7eb', borderRadius: 20, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-            {cat.icon} {cat.label}
+  return (
+    <div style={{ padding:16 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div><h2 style={{ margin:0, fontSize:22, fontWeight:800 }}>🏪 Marketplace</h2><p style={{ margin:0, color:'#6b7280', fontSize:13 }}>{filtered.length} listings • Kyenjojo Area</p></div>
+        <button onClick={() => setShowSell(true)} style={{ background:'#d4a017', color:'white', border:'none', borderRadius:12, padding:'10px 16px', fontWeight:700, fontSize:14, cursor:'pointer' }}>+ Sell</button>
+      </div>
+      {postSuccess && <div style={{ background:'#dcfce7', color:'#16a34a', borderRadius:12, padding:12, marginBottom:12, fontWeight:600 }}>✅ Listing posted!</div>}
+      {/* Search */}
+      <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search listings, village..."
+        style={{ width:'100%', border:'2px solid #e5e7eb', borderRadius:12, padding:'12px 16px', fontSize:16, outline:'none', marginBottom:12, background:'white' }} />
+      {/* Category filter */}
+      <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, marginBottom:16 }}>
+        {CATS.map(c => (
+          <button key={c.k} onClick={() => setCat(c.k)}
+            style={{ background: cat===c.k ? '#1a6b3a' : 'white', color: cat===c.k ? 'white' : '#374151', border:`2px solid ${cat===c.k ? '#1a6b3a' : '#e5e7eb'}`, borderRadius:999, padding:'6px 14px', fontWeight:600, fontSize:14, whiteSpace:'nowrap', cursor:'pointer' }}>
+            {c.i} {c.l}
           </button>
         ))}
       </div>
-
-      {/* Stats bar */}
-      <div style={{ display: 'flex', gap: 12, padding: '0 16px 12px' }}>
-        <span style={{ fontSize: 13, color: '#6b7280' }}>{filtered.length} listings found</span>
-      </div>
-
-      {/* Listing grid */}
-      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {filtered.map(listing => (
-          <div key={listing.id} onClick={() => setSelected(listing)}
-            style={{ background: 'white', borderRadius: 16, padding: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', gap: 14 }}>
-            <div style={{ width: 72, height: 72, borderRadius: 12, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, flexShrink: 0 }}>
-              {listing.images[0]}
+      {/* Listings grid */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        {filtered.map(l => (
+          <div key={l.id} className="card" onClick={() => setSelected(l)} style={{ cursor:'pointer', padding:12 }}>
+            <div style={{ height:60, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, background:'#f5f7f2', borderRadius:10, marginBottom:8 }}>
+              {l.category==='crops'?'🌾':l.category==='livestock'?'🐄':l.category==='seeds'?'🌱':l.category==='tools'?'🔧':l.category==='services'?'🚜':'📦'}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <p style={{ margin: '0 0 2px', fontWeight: 700, fontSize: 15, color: '#1a1a1a' }}>{listing.title}</p>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706' }}>⭐{listing.rating}</span>
-              </div>
-              <p style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800, color: '#1a6b3a' }}>
-                {listing.price.toLocaleString()} UGX<span style={{ fontSize: 12, fontWeight: 400, color: '#6b7280' }}>/{listing.unit}</span>
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>📍 {listing.seller_village}</span>
-                <span style={{ background: ACCOUNT_TYPE_COLORS[listing.seller_type] + '20', color: ACCOUNT_TYPE_COLORS[listing.seller_type], fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99 }}>
-                  {listing.seller_type.toUpperCase()}
-                </span>
-                {listing.delivery_available && <span style={{ fontSize: 10, color: '#2563eb' }}>🚚</span>}
-              </div>
-            </div>
+            <p style={{ margin:'0 0 4px', fontWeight:700, fontSize:13, lineHeight:1.3 }}>{l.title}</p>
+            <p style={{ margin:0, color:'#1a6b3a', fontWeight:800, fontSize:14 }}>UGX {l.price.toLocaleString()}/{l.unit}</p>
+            <p style={{ margin:'4px 0 0', color:'#9ca3af', fontSize:11 }}>📍 {l.seller_village}</p>
+            {l.delivery_available && <span style={{ background:'#dcfce7', color:'#16a34a', borderRadius:999, padding:'2px 8px', fontSize:11, fontWeight:600, display:'inline-block', marginTop:4 }}>🚚 Delivery</span>}
           </div>
         ))}
       </div>
 
-      {/* Sell Modal */}
+      {/* Post Listing Modal */}
       {showSell && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
-          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', padding: 24, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>List Something to Sell</h3>
-              <button onClick={() => setShowSell(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', minHeight: 0 }}>✕</button>
-            </div>
-
-            <p style={{ margin: '0 0 16px', color: '#6b7280', fontSize: 14 }}>Choose your seller account type:</p>
-
-            {([
-              { type:'farmer', icon:'👨‍🌾', label:'Farmer', desc:'Sell your harvest, livestock, and farm products' },
-              { type:'trader', icon:'🤝', label:'Trader / Middleman', desc:'Buy and resell agricultural goods in bulk' },
-              { type:'vendor', icon:'🛒', label:'Vendor', desc:'Sell fresh produce, food items at markets' },
-              { type:'store', icon:'🏪', label:'Shop / Store', desc:'Sell tools, inputs, and other goods' },
-            ] as const).map(acct => (
-              <Link key={acct.type} href={`/farmer/my-store?type=${acct.type}`}
-                onClick={() => setShowSell(false)}
-                style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 16, border: '1px solid #e5e7eb', borderRadius: 14, marginBottom: 10, textDecoration: 'none', color: 'inherit' }}>
-                <span style={{ fontSize: 32 }}>{acct.icon}</span>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>{acct.label}</p>
-                  <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>{acct.desc}</p>
-                </div>
-                <span style={{ marginLeft: 'auto', fontSize: 20, color: '#9ca3af' }}>›</span>
-              </Link>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:200, display:'flex', alignItems:'flex-end' }}>
+          <div style={{ background:'white', borderRadius:'20px 20px 0 0', padding:24, width:'100%', maxHeight:'85vh', overflowY:'auto' }}>
+            <h3 style={{ margin:'0 0 16px', fontSize:20, fontWeight:800 }}>📦 Post a Listing</h3>
+            {[{key:'title',label:'Product/Service Title',type:'text'},{key:'price',label:'Price (UGX)',type:'number'},{key:'unit',label:'Unit (e.g. kg, piece, acre)',type:'text'},{key:'quantity',label:'Quantity Available',type:'number'},{key:'phone',label:'Contact Phone',type:'tel'}].map(f=>(
+              <div key={f.key} style={{ marginBottom:12 }}>
+                <label style={{ fontSize:13, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>{f.label}</label>
+                <input type={f.type} value={(form as Record<string,string>)[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))}
+                  style={{ width:'100%', border:'2px solid #e5e7eb', borderRadius:12, padding:'12px 14px', fontSize:16, outline:'none' }} />
+              </div>
             ))}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Description</label>
+              <textarea value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} rows={3} style={{ width:'100%', border:'2px solid #e5e7eb', borderRadius:12, padding:'12px 14px', fontSize:16, outline:'none', resize:'none' }} />
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Category</label>
+              <select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value}))} style={{ width:'100%', border:'2px solid #e5e7eb', borderRadius:12, padding:'12px 14px', fontSize:16, outline:'none' }}>
+                {['crops','livestock','seeds','tools','services','produce'].map(c=><option key={c} value={c} style={{ textTransform:'capitalize' }}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ display:'flex', gap:16, marginBottom:16 }}>
+              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+                <input type="checkbox" checked={form.is_negotiable} onChange={e=>setForm(p=>({...p,is_negotiable:e.target.checked}))} />
+                <span style={{ fontSize:14 }}>Negotiable</span>
+              </label>
+              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+                <input type="checkbox" checked={form.delivery_available} onChange={e=>setForm(p=>({...p,delivery_available:e.target.checked}))} />
+                <span style={{ fontSize:14 }}>Delivery</span>
+              </label>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <button onClick={() => setShowSell(false)} style={{ background:'white', border:'2px solid #e5e7eb', borderRadius:12, padding:'14px', fontWeight:700, cursor:'pointer' }}>Cancel</button>
+              <button onClick={handlePost} disabled={posting} style={{ background:'#1a6b3a', color:'white', border:'none', borderRadius:12, padding:'14px', fontWeight:700, cursor:'pointer', opacity:posting?0.7:1 }}>
+                {posting ? 'Posting...' : 'Post Listing'}
+              </button>
+            </div>
           </div>
         </div>
       )}
