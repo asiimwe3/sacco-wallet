@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['admin','field_officer'];
+    }
+    match /profiles/{uid} {
+      allow read, write: if request.auth.uid == uid || isAdmin();
+    }
+    match /wallets/{uid} {
+      allow read, write: if request.auth.uid == uid || isAdmin();
+    }
+    match /farm_records/{uid} {
+      allow read, write: if request.auth.uid == uid || isAdmin();
+    }
+    match /savings_transactions/{doc} {
+      allow read, create: if request.auth.uid == resource.data.farmer_id || request.auth.uid == request.resource.data.farmer_id || isAdmin();
+    }
+    match /loans/{doc} {
+      allow read, create: if request.auth.uid == resource.data.farmer_id || request.auth.uid == request.resource.data.farmer_id;
+      allow update: if isAdmin();
+    }
+    match /credit_scores/{doc} {
+      allow read: if request.auth.uid == resource.data.farmer_id || isAdmin();
+      allow write: if isAdmin();
+    }
+    match /market_prices/{doc} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /marketplace_listings/{doc} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth.uid == resource.data.seller_id || isAdmin();
+    }
+  }
+}

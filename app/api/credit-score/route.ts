@@ -1,50 +1,46 @@
-import { createClient } from '@supabase/supabase-js'
+import { initializeApp, cert, getApps } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
 import { NextRequest, NextResponse } from 'next/server'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getAdmin() {
+  if (getApps().length) return getApps()[0]
+  return initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!)) })
+}
 
 export async function POST(req: NextRequest) {
   const { farmer_id } = await req.json()
-  if (!farmer_id) return NextResponse.json({ error: 'Missing farmer_id' }, { status: 400 })
+  if (!farmer_id) return NextResponse.json({ error:'Missing farmer_id' }, { status:400 })
+  const app = getAdmin()
+  const db = getFirestore(app)
 
-  const [{ data: wallet }, { data: loans }, { data: txns }] = await Promise.all([
-    supabase.from('wallets').select('savings_balance,shares_owned').eq('user_id', farmer_id).single(),
-    supabase.from('loans').select('status,amount,repaid_amount').eq('farmer_id', farmer_id),
-    supabase.from('savings_transactions').select('created_at').eq('farmer_id', farmer_id).eq('type','deposit'),
+  const [walletSnap, loansSnap, txnsSnap] = await Promise.all([
+    db.collection('wallets').doc(farmer_id).get(),
+    db.collection('loans').where('farmer_id','==',farmer_id).get(),
+    db.collection('savings_transactions').where('farmer_id','==',farmer_id).where('type','==','deposit').get(),
   ])
 
-  let score = 0
-  const factors: Record<string,number> = {}
-
-  // Savings balance (up to 30 pts)
-  const savBal = wallet?.savings_balance || 0
-  const savScore = Math.min(Math.floor(savBal / 50000), 30)
+  let score = 0; const factors: Record<string,number> = {}
+  const savBal = walletSnap.data()?.savings_balance || 0
+  const savScore = Math.min(Math.floor(savBal/50000), 30)
   score += savScore; factors.savings_balance = savScore
 
-  // Repayment history (up to 40 pts)
-  const repaid = loans?.filter(l => l.status === 'repaid').length || 0
-  const defaulted = loans?.filter(l => l.status === 'defaulted').length || 0
-  const repayScore = Math.min(repaid * 15, 40) - defaulted * 20
-  score += Math.max(repayScore, 0); factors.repayment = Math.max(repayScore, 0)
+  const loans = loansSnap.docs.map(d=>d.data())
+  const repaid = loans.filter(l=>l.status==='repaid').length
+  const defaulted = loans.filter(l=>l.status==='defaulted').length
+  const repayScore = Math.max(Math.min(repaid*15,40) - defaulted*20, 0)
+  score += repayScore; factors.repayment = repayScore
 
-  // Savings regularity (up to 20 pts)
-  const monthSet = new Set(txns?.map(t => t.created_at.slice(0,7)) || [])
-  const regScore = Math.min(monthSet.size * 2, 20)
+  const monthSet = new Set(txnsSnap.docs.map(d=>d.data().created_at?.slice(0,7)).filter(Boolean))
+  const regScore = Math.min(monthSet.size*2, 20)
   score += regScore; factors.regularity = regScore
 
-  // Shares (up to 10 pts)
-  const shareScore = Math.min((wallet?.shares_owned || 0), 10)
+  const shareScore = Math.min(walletSnap.data()?.shares_owned||0, 10)
   score += shareScore; factors.shares = shareScore
 
   score = Math.max(0, Math.min(100, score))
-  const grade = score >= 80 ? 'A' : score >= 65 ? 'B' : score >= 50 ? 'C' : score >= 35 ? 'D' : 'F'
-  const maxLoan = score >= 80 ? 3000000 : score >= 65 ? 2000000 : score >= 50 ? 1000000 : score >= 35 ? 500000 : 200000
+  const grade = score>=80?'A':score>=65?'B':score>=50?'C':score>=35?'D':'F'
+  const maxLoan = score>=80?3000000:score>=65?2000000:score>=50?1000000:score>=35?500000:200000
 
-  // Save to DB
-  await supabase.from('credit_scores').insert({ farmer_id, score, grade, max_loan_ugx: maxLoan, factors })
-
-  return NextResponse.json({ score, grade, max_loan_ugx: maxLoan, factors })
+  await db.collection('credit_scores').add({ farmer_id, score, grade, max_loan_ugx:maxLoan, factors, calculated_at: new Date().toISOString() })
+  return NextResponse.json({ score, grade, max_loan_ugx:maxLoan, factors })
 }

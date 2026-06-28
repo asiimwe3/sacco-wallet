@@ -25,45 +25,42 @@ const SIDE = [
 export default function FarmerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router   = useRouter()
-  const [online, setOnline]   = useState(true)
-  const [lang, setLang]       = useState('english')
+  const [online, setOnline]     = useState(true)
+  const [lang, setLang]         = useState('english')
   const [sideOpen, setSideOpen] = useState(false)
   const { profile, signOut, loading } = useAuth()
 
   useEffect(() => {
     setOnline(navigator.onLine)
     const onL = () => setOnline(true), offL = () => setOnline(false)
-    window.addEventListener('online', onL); window.addEventListener('offline', offL)
+    window.addEventListener('online',onL); window.addEventListener('offline',offL)
     const saved = localStorage.getItem('sacco_lang') || 'english'; setLang(saved)
     return () => { window.removeEventListener('online',onL); window.removeEventListener('offline',offL) }
   }, [])
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!loading && !profile) router.push('/')
-  }, [loading, profile, router])
+  useEffect(() => { if (!loading && !profile) router.push('/') }, [loading, profile, router])
 
-  const label = (item: typeof NAV[0]) => lang==='runyoro' ? item.rn : lang==='luganda' ? item.lg : item.label
+  const getLabel = (item: typeof NAV[0]) => lang==='runyoro' ? item.rn : lang==='luganda' ? item.lg : item.label
   const firstName = profile?.full_name?.split(' ')[0] || 'Farmer'
 
-  async function handleSignOut() {
-    await signOut(); router.push('/')
-  }
+  async function handleSignOut() { await signOut(); router.push('/') }
 
-  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#f5f7f2' }}><div style={{ fontSize:40 }}>🌾</div></div>
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#f5f7f2' }}>
+      <div style={{ textAlign:'center' }}><div style={{ fontSize:48 }}>🌾</div><p style={{ color:'#6b7280' }}>Loading...</p></div>
+    </div>
+  )
 
   return (
     <div style={{ paddingBottom:72, minHeight:'100vh', background:'#f5f7f2' }}>
       {!online && <div className="offline-banner">📵 Offline — Changes saved locally, will sync when connected</div>}
 
-      {/* Top bar */}
       <div style={{ background:'white', borderBottom:'1px solid #e5e7eb', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:40 }}>
         <button onClick={() => setSideOpen(true)} style={{ background:'none', border:'none', fontSize:24, cursor:'pointer', padding:'4px 8px', minHeight:0 }}>☰</button>
         <span style={{ fontWeight:800, fontSize:16, color:'#1a6b3a' }}>🌾 SACCO Wallet</span>
         <Link href="/farmer/marketplace" style={{ background:'#d4a017', color:'white', borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:700, textDecoration:'none' }}>🏪 Shop</Link>
       </div>
 
-      {/* Side drawer */}
       {sideOpen && (
         <div style={{ position:'fixed', inset:0, zIndex:100 }}>
           <div onClick={() => setSideOpen(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} />
@@ -75,19 +72,18 @@ export default function FarmerLayout({ children }: { children: React.ReactNode }
               <p style={{ margin:0, fontSize:14, fontWeight:600 }}>👤 {firstName}</p>
               {profile?.village && <p style={{ margin:'2px 0 0', fontSize:12, opacity:0.7 }}>📍 {profile.village}</p>}
             </div>
-            {/* Lang toggle */}
             <div style={{ padding:'12px 16px', display:'flex', gap:8, borderBottom:'1px solid #e5e7eb' }}>
-              {[['english','EN'],['runyoro','RN'],['luganda','LG']].map(([code,label]) => (
+              {[['english','EN'],['runyoro','RN'],['luganda','LG']].map(([code,lbl]) => (
                 <button key={code} onClick={() => { setLang(code); localStorage.setItem('sacco_lang',code); setSideOpen(false) }}
-                  style={{ flex:1, background: lang===code ? '#1a6b3a' : '#e5e7eb', color: lang===code ? 'white' : '#374151', border:'none', borderRadius:8, padding:'6px 0', fontWeight:700, fontSize:13, cursor:'pointer' }}>
-                  {label}
+                  style={{ flex:1, background:lang===code?'#1a6b3a':'#e5e7eb', color:lang===code?'white':'#374151', border:'none', borderRadius:8, padding:'6px 0', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                  {lbl}
                 </button>
               ))}
             </div>
             <div style={{ padding:'8px 0' }}>
               {SIDE.map(item => (
                 <Link key={item.href} href={item.href} onClick={() => setSideOpen(false)}
-                  style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 20px', color: pathname===item.href ? '#1a6b3a' : '#374151', fontWeight: pathname===item.href ? 700 : 500, textDecoration:'none', background: pathname===item.href ? '#f0fdf4' : 'transparent', fontSize:15 }}>
+                  style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 20px', color:pathname===item.href?'#1a6b3a':'#374151', fontWeight:pathname===item.href?700:500, textDecoration:'none', background:pathname===item.href?'#f0fdf4':'transparent', fontSize:15 }}>
                   <span style={{ fontSize:20 }}>{item.icon}</span>{item.label}
                 </Link>
               ))}
@@ -102,12 +98,11 @@ export default function FarmerLayout({ children }: { children: React.ReactNode }
 
       {children}
 
-      {/* Bottom nav */}
       <nav className="bottom-nav">
         {NAV.map(item => (
-          <Link key={item.href} href={item.href} className={`nav-item${pathname===item.href ? ' active' : ''}`}>
+          <Link key={item.href} href={item.href} className={`nav-item${pathname===item.href?' active':''}`}>
             <span style={{ fontSize:22 }}>{item.icon}</span>
-            <span>{label(item)}</span>
+            <span>{getLabel(item)}</span>
           </Link>
         ))}
       </nav>
