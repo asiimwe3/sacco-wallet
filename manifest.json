@@ -1,0 +1,30 @@
+{
+  "name": "SACCO Wallet \u2014 Kyenjojo Farmers",
+  "short_name": "SACCO Wallet",
+  "description": "Digital savings and loans for smallholder farmers in Kyenjojo, Uganda",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a6b3a",
+  "theme_color": "#1a6b3a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
+  "lang": "en-UG",
+  "prefer_related_applications": false
+}

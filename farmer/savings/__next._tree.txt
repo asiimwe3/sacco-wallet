@@ -1,0 +1,2 @@
+:HL["/sacco-wallet/_next/static/chunks/23vwzk6c2hk05.css","style"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"farmer","param":null,"prefetchHints":0,"slots":{"children":{"name":"savings","param":null,"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"rM-F_hC5reJw8M0LJFz3y"}
